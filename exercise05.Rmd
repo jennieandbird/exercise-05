@@ -89,7 +89,10 @@ d_sample_summary$se_diff <- (d_sample_summary$se_pop - d_sample_summary$se)
 ```{r Step1.8}
 library(infer)
 reps <- 1000
-samp_dist_decade <- d |> rep_sample_n(size = 100, reps = reps, replace = FALSE) |> group_by(Decade) |> summarize(mean = mean(runtimeMinutes), sd = sd(runtimeMinutes))
+# make a sampling distribution
+samp_dist_decade <- d |> group_by(Decade) |> rep_sample_n(size = 100, reps = reps, replace = FALSE)
+# summarize by decade (and by replicate, so there's like 1000 means and SDs)
+sample_dist_summary <- samp_dist_decade |> group_by(replicate, Decade) |> summarize(mean = mean(runtimeMinutes), sd = sd(runtimeMinutes))
 
 ```
 
@@ -97,8 +100,16 @@ samp_dist_decade <- d |> rep_sample_n(size = 100, reps = reps, replace = FALSE) 
 
 -   Then, calculate the **mean** and the **standard deviation** of the sampling distribution of sample means for each decade (the former should be a very good estimate of the population mean, while the latter is another estimate of the standard error in our estimate of the population mean for a particular sample size) and plot a histogram of the sampling distribution for each decade. What shape does it have?
 
-```{r Step 1.9}
+The shape is that of a normal distribution, but very narrow for all decades after the 1920s.
 
+```{r Step 1.9}
+# calculate the mean and SD of the means for each decade
+step9 <- sample_dist_summary |> group_by(Decade) |> filter(!is.na(mean)) |> summarise(mean = mean(sample_dist_summary$mean), sd = sd(sample_dist_summary$mean))
+# plot a histogram of the sampling distribution for each decade
+plots2 <- ggplot(sample_dist_summary, aes(x=mean)) + 
+  geom_histogram()
+plots2 + facet_wrap(vars(Decade), nrow = 2)
+# the shape is that of a normal distribution, but very narrow for all decades except 20s.
 ```
 
 ## Step 10
@@ -106,9 +117,218 @@ samp_dist_decade <- d |> rep_sample_n(size = 100, reps = reps, replace = FALSE) 
 -   Finally, compare the standard error in **runtimeMinutes** for samples of size 100 from each decade [1] as estimated from your **first** sample of 100 movies, [2] as calculated from the known *population* standard deviations for each decade, and [3] as estimated from the sampling distribution of sample means for each decade.
 
 ```{r Step 1.10}
+# [1] Standard error per decade from first sample
+step10.1 <- d_sample_summary$se
+# [2] Standard error from the known population
+step10.2 <- d_sample_summary$se_pop
+# [3] Standard error from the sampling distribution
+step10.3 <- (step9$sd/sqrt(100))
 
 ```
 
 # Challenge 2
 
 ## Step 1
+
+-   Using the {tidyverse} `read_csv()` function, load the “zombies.csv” dataset from [this URL](https://raw.githubusercontent.com/difiore/ada-2024-datasets/main/zombies.csv) as a “tibble” named **z**. This dataset includes the first and last name and gender of the **entire** population of 1000 people who have survived the zombie apocalypse and are now ekeing out an existence somewhere on the Gulf Coast, along with several other variables (height, weight, age, number of years of education, number of zombies they have killed, and college major).
+
+```{r Step 2.1}
+z <- read_csv("https://raw.githubusercontent.com/difiore/ada-2024-datasets/main/zombies.csv")
+as_tibble(z)
+```
+
+## Step 2
+
+-   Calculate the *population* mean and standard deviation for each quantitative random variable in the dataset (height, weight, age, number of zombies killed, and years of education).
+
+> **NOTE:** You will **not** want to use the built in `var()` and `sd()` commands as those are for *samples*.
+
+```{r Step 2.2}
+# pop mean
+z.mean.height <- mean(z$height)
+z.mean.weight <- mean(z$weight)
+z.mean.age <- mean(z$age)
+z.mean.zombies <- mean(z$zombies_killed)
+# pop sd
+z.sd.height <- sqrt(sum((z$height - mean(z$height))^2)/length(z$height))
+z.sd.weight <- sqrt(sum((z$weight - mean(z$weight))^2)/length(z$weight))
+z.sd.age <- sqrt(sum((z$age - mean(z$age))^2)/length(z$age))
+z.sd.zombies <- sqrt(sum((z$zombies_killed - mean(z$zombies_killed))^2)/length(z$zombies_killed))
+
+```
+
+## Step 3
+
+-   Use {ggplot} and make boxplots of each of these variables by gender.
+
+```{r Step 2.3}
+plots3.1 <- ggplot(z, aes(x=gender, y=height)) + geom_boxplot()
+plots3.1
+plots3.2 <- ggplot(z, aes(x=gender, y=weight)) + geom_boxplot()
+plots3.2
+plots3.3 <- ggplot(z, aes(x=gender, y=age)) + geom_boxplot()
+plots3.3
+plots3.4 <- ggplot(z, aes(x=gender, y=zombies_killed)) + geom_boxplot()
+plots3.4
+```
+
+## Step 4
+
+-   Use {ggplot} and make scatterplots of height and weight in relation to age (i.e., use age as the x variable), using different colored points for males versus females. Do these variables seem to be related? In what way?
+
+Both scatterplots show the same general shape, with a greater range (in height and weight) among younger individuals, but narrowing to a smaller range in older individuals.
+
+```{r Step 2.4}
+plots4.1h <- ggplot(z, aes(x=age, y=height, color=gender)) + geom_dotplot(binaxis = "y", binwidth = 0.5)
+plots4.1h
+plots4.1w <- ggplot(z, aes(x=age, y=weight, color=gender)) + geom_dotplot(binaxis = "y", binwidth = 2)
+plots4.1w
+```
+
+## Step 5
+
+-   Using histograms and Q-Q plots, check whether each of the quantitative variables seem to be drawn from a normal distribution. Which seem to be and which do not?
+
+> **HINT:** Not all are drawn from a normal distribution! For those that are not, can you determine what common distribution they are drawn from?
+
+Height, weight, and age follow a mostly normal distribution, with the majority of dots aligning in the Q-Q plots except for those at the ends. Years of education and number of zombies killed are not continuous variables, which narrows down the distribution types to Bernoulli, binomial, and poisson.
+
+```{r Step 2.5}
+library("car")
+# height
+qqPlot(z$height)
+ggplot(z, aes(x=height)) + geom_histogram(bins = 20)
+# weight
+qqPlot(z$weight)
+ggplot(z, aes(x=weight)) + geom_histogram(bins = 20)
+# zombies killed
+qqPlot(z$zombies_killed)
+ggplot(z, aes(x=zombies_killed)) + geom_histogram(bins = 20)
+# years of education
+qqPlot(z$years_of_education)
+ggplot(z, aes(x=years_of_education)) + geom_histogram(bins = 20)
+# age
+qqPlot(z$age)
+ggplot(z, aes(x=age)) + geom_histogram(bins = 20)
+```
+
+## Step 6
+
+-   Now use the `sample_n()` or `slice_sample()` function from {dplyr} to sample ONE subset of 50 zombie apocalypse survivors (without replacement) from this population and calculate the mean and sample standard deviation for each variable. Also estimate the standard error for each variable based on this one sample and use that to construct a theoretical 95% confidence interval for each mean. You can use either the standard normal *or* a Student’s t distribution to derive the critical values needed to calculate the lower and upper limits of the CI.
+
+```{r Step 2.6}
+# sample of 50, with means and sd
+z_sample <- z |> slice_sample(n = 50, replace = FALSE) 
+z_sample_summary <- z_sample |> summarize(mean.height = mean(height), sd.height = sd(height), mean.weight = mean(weight), sd.weight = sd(weight), mean.zombies = mean(zombies_killed), sd.zombies = sd(zombies_killed), mean.education = mean(years_of_education), sd.education = sd(years_of_education), mean.age = mean(age), sd.age = sd(age))
+# also se
+z_sample_summary$se.height <- (z_sample_summary$sd.height/sqrt(50))
+z_sample_summary$se.weight <- (z_sample_summary$sd.weight/sqrt(50))
+z_sample_summary$se.zombies <- (z_sample_summary$sd.zombies/sqrt(50))
+z_sample_summary$se.education <- (z_sample_summary$sd.education/sqrt(50))
+z_sample_summary$se.age <- (z_sample_summary$sd.age/sqrt(50))
+# 95% CI for each mean (using standard normal or Student's t distribution)
+CI.height <- z_sample_summary$mean.height + c(-1, 1) * qt(1 - 0.05/2, df = 49) * z_sample_summary$se.height
+CI.weight <- z_sample_summary$mean.weight + c(-1, 1) * qt(1 - 0.05/2, df = 49) * z_sample_summary$se.weight
+CI.zombies <- z_sample_summary$mean.zombies + c(-1, 1) * qt(1 - 0.05/2, df = 49) * z_sample_summary$se.zombies
+CI.education <- z_sample_summary$mean.education + c(-1, 1) * qt(1 - 0.05/2, df = 49) * z_sample_summary$se.education
+CI.age <- z_sample_summary$mean.age + c(-1, 1) * qt(1 - 0.05/2, df = 49) * z_sample_summary$se.age
+```
+
+## Step 7
+
+-   Then draw another 199 random samples of 50 zombie apocalypse survivors out of the population and calculate the mean for each of the these samples. Together with the first sample you drew out, you now have a set of 200 means for each variable (each of which is based on 50 observations), which constitutes a sampling distribution for each variable. What are the means and standard deviations of the **sampling distribution** for each variable? How do the standard deviations of the sampling distribution for each variable compare to the standard errors estimated from your first sample of size 50?
+
+For the 200 random samples:
+
+-   Height: 67.62 (mean of 200 means), 4.29 (mean of 200 SDs), 0.60 (SD of 200 means)
+
+-   Weight: 143.90 (mean of 200 means), 18.35 (mean of 200 SDs), 2.52 (SD of 200 means)
+
+-   Zombies killed: 2.98 (mean of 200 means), 1.72 (mean of 200 SDs), 0.24 (SD of 200 means)
+
+-   Years of education: 3.00 (mean of 200 means), 1.67 (mean of 200 SDs), 0.23 (SD of 200 means)
+
+-   Age: 20.05 (mean of 200 means), 2.96 (mean of 200 SDs), 0.39 (SD of 200 means)
+
+The standard deviations of 200 means are similar to the standard errors from the first sample of 50.
+
+```{r Step 2.7}
+reps <- 199
+# make a sampling distribution
+z_samp_dist <- z |> rep_sample_n(size = 50, reps = reps, replace = FALSE)
+# summarize each replicate
+z_sample_dist_summary <- z_samp_dist |> group_by(replicate) |> summarize(mean.height = mean(height), sd.height = sd(height), mean.weight = mean(weight), sd.weight = sd(weight), mean.zombies = mean(zombies_killed), sd.zombies = sd(zombies_killed), mean.education = mean(years_of_education), sd.education = sd(years_of_education), mean.age = mean(age), sd.age = sd(age))
+# add first sample to the 199 samples
+z_sample_dist_summary <- bind_rows(z_sample_dist_summary, z_sample_summary)
+mean(z_sample_dist_summary$sd.age)
+sd(z_sample_dist_summary$mean.age)
+
+```
+
+## Step 8
+
+-   Plot the sampling distributions for each variable mean. What do they look like? Are they normally distributed? What about for those variables that you concluded were not originally drawn from a normal distribution?
+
+All of the variables have been smoothed over into what looks like normal distributions. The discrete variables (zombies killed and years of education) appear normally distributed and fit the Q-Q plots much better than before.
+
+```{r Step 2.8}
+ggplot(z_sample_dist_summary, aes(x = mean.height)) + geom_histogram(bins = 20)
+qqPlot(z_sample_dist_summary$mean.height)
+ggplot(z_sample_dist_summary, aes(x = mean.weight)) + geom_histogram(bins = 20)
+qqPlot(z_sample_dist_summary$mean.weight)
+ggplot(z_sample_dist_summary, aes(x = mean.zombies)) + geom_histogram(bins = 20)
+qqPlot(z_sample_dist_summary$mean.zombies)
+ggplot(z_sample_dist_summary, aes(x = mean.education)) + geom_histogram(bins = 20)
+qqPlot(z_sample_dist_summary$mean.education)
+ggplot(z_sample_dist_summary, aes(x = mean.age)) + geom_histogram(bins = 20)
+qqPlot(z_sample_dist_summary$mean.age)
+```
+
+## Step 9
+
+-   Construct a 95% confidence interval for each mean **directly from the sampling distribution** of sample means using the central 95% that distribution (i.e., by setting the lower and upper CI bounds to 2.5% and 97.5% of the way through that distribution).
+
+> **HINT**: You will want to use the `quantile()` function for this!
+
+How do the various 95% CIs you estimated compare to one another (i.e., the CI based on one sample and the corresponding sample standard deviation versus the CI based on simulation where you created a sampling distribution across 200 samples)?
+
+> **NOTE:** Remember, too, that the standard deviation of the sampling distribution is the standard error. You *could* use this value to derive yet another estimate for the 95% CI as the shape of the sampling distribution should be normal.
+
+-   Height: 67.2, 69.4 (one sample); 66.5, 68.7 (200 samples)
+-   Weight: 141, 152 (one sample); 139, 149 (200 samples)
+-   Zombies killed: 2.67, 3.77 (one sample); 2.56, 3.44 (200 samples)
+-   Years of education: 2.53, 3.47 (one sample); 2.58, 3.46 (200 samples)
+-   Age: 19.3, 20.7 (one sample); 19.2, 20.8 (200 samples)
+
+```{r Step 2.9}
+CI.dist.height <- quantile(z_sample_dist_summary$mean.height, c(0.025, 0.975))
+CI.dist.weight <- quantile(z_sample_dist_summary$mean.weight, c(0.025, 0.975))
+CI.dist.zombies <- quantile(z_sample_dist_summary$mean.zombies, c(0.025, 0.975))
+CI.dist.education <- quantile(z_sample_dist_summary$mean.education, c(0.025, 0.975))
+CI.dist.age <- quantile(z_sample_dist_summary$mean.age, c(0.025, 0.975))
+```
+
+## Step 10
+
+-   Finally, use bootstrapping to generate a 95% confidence interval for each variable mean **by resampling 1000 samples, with replacement, from your original sample** (i.e., by setting the lower and upper CI bounds to 2.5% and 97.5% of the way through the sampling distribution generated by bootstrapping).
+
+Adding CIs to list from Step 9:
+
+-   Height: 67.2, 69.4 (one sample); 66.5, 68.7 (200 samples); **65.7, 70.8** (bootstrapping)
+-   Weight: 141, 152 (one sample); 139, 149 (200 samples); **136, 158** (bootstrapping)
+-   Zombies killed: 2.67, 3.77 (one sample); 2.56, 3.44 (200 samples); **2, 4.4** (bootstrapping)
+-   Years of education: 2.53, 3.47 (one sample); 2.58, 3.46 (200 samples); **2, 4** (bootstrapping)
+-   Age: 19.3, 20.7 (one sample); 19.2, 20.8 (200 samples); **18.5, 21.5** (bootstrapping)
+
+```{r Step 2.10}
+n_boot <- 1000
+boot <- vector(length = n_boot)
+n <- length(z_sample)
+# the size of each bootstrap sample should equivalent to the size our original
+# sample
+for (i in 1:n_boot) {
+    boot[[i]] <- mean(sample(z_sample$age, n, replace = TRUE))
+}
+lower_boot <- quantile(boot, 0.025)
+upper_boot <- quantile(boot, 0.975)
+```
